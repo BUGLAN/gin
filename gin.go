@@ -63,7 +63,7 @@ func New() *Engine {
 	engine := &Engine{}
 	engine.RouterGroup = &RouterGroup{nil, "", nil, engine}
 	engine.router = httprouter.New()
-	engine.router.NotFound = engine.handle404
+	engine.router.NotFound = engine
 	return engine
 }
 
