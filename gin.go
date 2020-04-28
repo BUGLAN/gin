@@ -48,19 +48,19 @@ type (
 	// and an array of handlers (middlewares)
 	// 在内部管理一个路由, 一个RouterGroup有一个相关的前缀, 和一个列表的handlers(中间件)
 	RouterGroup struct {
-		Handlers []HandlerFunc
-		prefix   string
-		parent   *RouterGroup
-		engine   *Engine
+		Handlers []HandlerFunc // handlers处理Context的函数列表
+		prefix   string // 前缀
+		parent   *RouterGroup // 父级的RouterGroup
+		engine   *Engine // engine实例
 	}
 
 	// Represents the web framework, it wrappers the blazing fast httprouter multiplexer and a list of global middlewares.
-	// 代表这个web矿建, 包装了超快的httprouter和许多全局中间件
+	// 代表了gin这个web框架, 包装了超快的httprouter和许多全局中间件
 	Engine struct {
-		*RouterGroup
-		handlers404   []HandlerFunc
-		router        *httprouter.Router
-		HTMLTemplates *template.Template
+		*RouterGroup // 包装router, 拥有RouterGroup的所有方法
+		handlers404   []HandlerFunc // gin 用于handler404的方法, 说实话没啥用
+		router        *httprouter.Router // 包装的httprouter
+		HTMLTemplates *template.Template // 包装的模板实例
 	}
 )
 
@@ -84,6 +84,7 @@ func Default() *Engine {
 	return engine
 }
 
+// LoadHTMLTemplates 加载模板实例
 func (engine *Engine) LoadHTMLTemplates(pattern string) {
 	engine.HTMLTemplates = template.Must(template.ParseGlob(pattern))
 }
@@ -94,6 +95,7 @@ func (engine *Engine) NotFound404(handlers ...HandlerFunc) {
 	engine.handlers404 = handlers
 }
 
+// handler404中间件, 似乎没有东西来引用这个函数
 func (engine *Engine) handle404(w http.ResponseWriter, req *http.Request) {
 	handlers := engine.combineHandlers(engine.handlers404)
 	c := engine.createContext(w, req, nil, handlers)
@@ -125,10 +127,15 @@ func (engine *Engine) ServeFiles(path string, root http.FileSystem) {
 
 // ServeHTTP makes the router implement the http.Handler interface.
 // ServeHTTP 使 httprouter 实现了http.Handler的接口
+// 实际上是httprouter来处理请求
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	engine.router.ServeHTTP(w, req)
 }
 
+// 使用http.ListenAndServe的形式将代码运行起来, 同时也代表engine实现了http.Handler的接口
+//type Handler interface {
+//	ServeHTTP(ResponseWriter, *Request)
+//}
 func (engine *Engine) Run(addr string) {
 	http.ListenAndServe(addr, engine)
 }
@@ -160,12 +167,13 @@ func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
 // Group 创建一个New的group, 你应该创建所有的routers, 然后这些routers共用公共的middlewares或者是一个相同的路径前缀
 // 例如, 一个group中所有routers应该使用一个功能的授权中间件.
 func (group *RouterGroup) Group(component string, handlers ...HandlerFunc) *RouterGroup {
+	// 构造当前group的路由前缀
 	prefix := path.Join(group.prefix, component)
 	return &RouterGroup{
-		Handlers: group.combineHandlers(handlers),
-		parent:   group,
-		prefix:   prefix,
-		engine:   group.engine,
+		Handlers: group.combineHandlers(handlers), // 组合handlers, 因为可能有group := engine.Group("/some", Auth())
+		parent:   group, // 父group
+		prefix:   prefix, // 当前group的前缀
+		engine:   group.engine, // engine实例指针
 	}
 }
 
@@ -219,6 +227,7 @@ func (group *RouterGroup) PUT(path string, handlers ...HandlerFunc) {
 	group.Handle("PUT", path, handlers)
 }
 
+// combineHandlers 简单的将传入handler加在group.handlers的后面
 func (group *RouterGroup) combineHandlers(handlers []HandlerFunc) []HandlerFunc {
 	s := len(group.Handlers) + len(handlers)
 	h := make([]HandlerFunc, 0, s)
