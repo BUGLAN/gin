@@ -16,11 +16,14 @@ const (
 )
 
 type (
+	// HandlerFunc 可以理解为处理ctx的函数
 	HandlerFunc func(*Context)
 
+	// H  map[string]interface{} 快捷方式
 	H map[string]interface{}
 
 	// Used internally to collect a error ocurred during a http request.
+	// 用于在一个http请求的内部收集错误
 	ErrorMsg struct {
 		Message string      `json:"msg"`
 		Meta    interface{} `json:"meta"`
@@ -28,6 +31,8 @@ type (
 
 	// Context is the most important part of gin. It allows us to pass variables between middleware,
 	// manage the flow, validate the JSON of a request and render a JSON response for example.
+	// Context是gin最终的一部分, 它允许我们在中间件中传递变量
+	// 管理数据的流动, 例如可以渲染一个json相应或验证请求的json形式
 	Context struct {
 		Req      *http.Request
 		Writer   http.ResponseWriter
@@ -41,6 +46,7 @@ type (
 
 	// Used internally to configure router, a RouterGroup is associated with a prefix
 	// and an array of handlers (middlewares)
+	// 在内部管理一个路由, 一个RouterGroup有一个相关的前缀, 和一个列表的handlers(中间件)
 	RouterGroup struct {
 		Handlers []HandlerFunc
 		prefix   string
@@ -49,6 +55,7 @@ type (
 	}
 
 	// Represents the web framework, it wrappers the blazing fast httprouter multiplexer and a list of global middlewares.
+	// 代表这个web矿建, 包装了超快的httprouter和许多全局中间件
 	Engine struct {
 		*RouterGroup
 		handlers404   []HandlerFunc
@@ -59,6 +66,8 @@ type (
 
 // Returns a new blank Engine instance without any middleware attached.
 // The most basic configuration
+// 返回了一个新的空的Engine实例, 没有附加任何的中间件
+// 最基础的配置选项
 func New() *Engine {
 	engine := &Engine{}
 	engine.RouterGroup = &RouterGroup{nil, "", nil, engine}
@@ -68,6 +77,7 @@ func New() *Engine {
 }
 
 // Returns a Engine instance with the Logger and Recovery already attached.
+// 返回了一个新的空的Engine实例, 附加了Logger和Recover的中间件
 func Default() *Engine {
 	engine := New()
 	engine.Use(Recovery(), Logger())
@@ -79,6 +89,7 @@ func (engine *Engine) LoadHTMLTemplates(pattern string) {
 }
 
 // Adds handlers for NotFound. It return a 404 code by default.
+// 添加了NotFound的handler, 它默认返回一个4040的http code
 func (engine *Engine) NotFound404(handlers ...HandlerFunc) {
 	engine.handlers404 = handlers
 }
@@ -105,11 +116,15 @@ func (engine *Engine) handle404(w http.ResponseWriter, req *http.Request) {
 // To use the operating system's file system implementation,
 // use http.Dir:
 //     router.ServeFiles("/src/*filepath", http.Dir("/var/www"))
+// ServerFiles 提供了来自文件系统的文件服务
+// 路径必须以`/*filepath`结尾, 文件将会在本地起起来
+// todo: not translation finished
 func (engine *Engine) ServeFiles(path string, root http.FileSystem) {
 	engine.router.ServeFiles(path, root)
 }
 
 // ServeHTTP makes the router implement the http.Handler interface.
+// ServeHTTP 使 httprouter 实现了http.Handler的接口
 func (engine *Engine) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	engine.router.ServeHTTP(w, req)
 }
@@ -122,6 +137,7 @@ func (engine *Engine) Run(addr string) {
 /********** ROUTES GROUPING *********/
 /************************************/
 
+// createContext 创建context
 func (group *RouterGroup) createContext(w http.ResponseWriter, req *http.Request, params httprouter.Params, handlers []HandlerFunc) *Context {
 	return &Context{
 		Writer:   w,
@@ -134,12 +150,15 @@ func (group *RouterGroup) createContext(w http.ResponseWriter, req *http.Request
 }
 
 // Adds middlewares to the group, see example code in github.
+// 添加中间件到group, 请看示例代码
 func (group *RouterGroup) Use(middlewares ...HandlerFunc) {
 	group.Handlers = append(group.Handlers, middlewares...)
 }
 
-// Greates a new router group. You should create add all the routes that share that have common middlwares or same path prefix.
+// Group a new router group. You should create add all the routes that share that have common middlwares or same path prefix.
 // For example, all the routes that use a common middlware for authorization could be grouped.
+// Group 创建一个New的group, 你应该创建所有的routers, 然后这些routers共用公共的middlewares或者是一个相同的路径前缀
+// 例如, 一个group中所有routers应该使用一个功能的授权中间件.
 func (group *RouterGroup) Group(component string, handlers ...HandlerFunc) *RouterGroup {
 	prefix := path.Join(group.prefix, component)
 	return &RouterGroup{
@@ -154,12 +173,19 @@ func (group *RouterGroup) Group(component string, handlers ...HandlerFunc) *Rout
 // The last handler should be the real handler, the other ones should be middlewares that can and should be shared among different routes.
 // See the example code in github.
 //
-// For GET, POST, PUT, PATCH and DELETE requests the respective shortcut
+// For GET, POST, PUT, PATCH and DELETE requests the  shortcut
 // functions can be used.
 //
 // This function is intended for bulk loading and to allow the usage of less
 // frequently used, non-standardized or custom methods (e.g. for internal
 // communication with a proxy).
+// Handler注册了一个新的请求handler和中间件, 他有给定的路径和方法
+// 最后一个handler应该是真是的handler, 其他的应该是中间件, 他可以共享不同的router
+// 在github查看实例代码
+//
+// 对于  GET, POST, PUT, PATCH and DELETE 请求, 各自的快捷韩式应该被使用
+//
+// 这个函数用于批量加载, 并且不要经常使用这个函数, 不是标准的自定义函数(例如, 内部的沟通和代理)
 func (group *RouterGroup) Handle(method, p string, handlers []HandlerFunc) {
 	p = path.Join(group.prefix, p)
 	handlers = group.combineHandlers(handlers)
@@ -208,6 +234,8 @@ func (group *RouterGroup) combineHandlers(handlers []HandlerFunc) []HandlerFunc 
 // Next should be used only in the middlewares.
 // It executes the pending handlers in the chain inside the calling handler.
 // See example in github.
+// Next 应该被用于中间件中
+// 它在链式调用的handler中执行将要发生的handler
 func (c *Context) Next() {
 	c.index++
 	s := int8(len(c.handlers))
@@ -299,6 +327,8 @@ func (c *Context) ParseBody(item interface{}) error {
 
 // Serializes the given struct as a JSON into the response body in a fast and efficient way.
 // It also sets the Content-Type as "application/json"
+// 快速且高效的讲给定的响应体里面将struct序列化成json格式
+// 他也会将content-type改成 application/json
 func (c *Context) JSON(code int, obj interface{}) {
 	if code >= 0 {
 		c.Writer.WriteHeader(code)
