@@ -31,7 +31,7 @@ type (
 
 	// Context is the most important part of gin. It allows us to pass variables between middleware,
 	// manage the flow, validate the JSON of a request and render a JSON response for example.
-	// Context是gin最终的一部分, 它允许我们在中间件中传递变量
+	// Context是gin最重要的一部分, 它允许我们在中间件中传递变量
 	// 管理数据的流动, 例如可以渲染一个json相应或验证请求的json形式
 	Context struct {
 		Req      *http.Request
