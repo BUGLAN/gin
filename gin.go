@@ -36,12 +36,12 @@ type (
 	Context struct {
 		Req      *http.Request
 		Writer   http.ResponseWriter
-		Keys     map[string]interface{}
-		Errors   []ErrorMsg
-		Params   httprouter.Params
-		handlers []HandlerFunc
-		engine   *Engine
-		index    int8
+		Keys     map[string]interface{} // context键值对存储
+		Errors   []ErrorMsg             // 错误
+		Params   httprouter.Params      // httprouter参数
+		handlers []HandlerFunc          // handlers
+		engine   *Engine                // engine参数
+		index    int8                   // ctx索引
 	}
 
 	// Used internally to configure router, a RouterGroup is associated with a prefix
@@ -49,16 +49,16 @@ type (
 	// 在内部管理一个路由, 一个RouterGroup有一个相关的前缀, 和一个列表的handlers(中间件)
 	RouterGroup struct {
 		Handlers []HandlerFunc // handlers处理Context的函数列表
-		prefix   string // 前缀
-		parent   *RouterGroup // 父级的RouterGroup
-		engine   *Engine // engine实例
+		prefix   string        // 前缀
+		parent   *RouterGroup  // 父级的RouterGroup
+		engine   *Engine       // engine实例
 	}
 
 	// Represents the web framework, it wrappers the blazing fast httprouter multiplexer and a list of global middlewares.
 	// 代表了gin这个web框架, 包装了超快的httprouter和许多全局中间件
 	Engine struct {
-		*RouterGroup // 包装router, 拥有RouterGroup的所有方法
-		handlers404   []HandlerFunc // gin 用于handler404的方法, 说实话没啥用
+		*RouterGroup                     // 包装router, 拥有RouterGroup的所有方法
+		handlers404   []HandlerFunc      // gin 用于handler404的方法
 		router        *httprouter.Router // 包装的httprouter
 		HTMLTemplates *template.Template // 包装的模板实例
 	}
@@ -171,9 +171,9 @@ func (group *RouterGroup) Group(component string, handlers ...HandlerFunc) *Rout
 	prefix := path.Join(group.prefix, component)
 	return &RouterGroup{
 		Handlers: group.combineHandlers(handlers), // 组合handlers, 因为可能有group := engine.Group("/some", Auth())
-		parent:   group, // 父group
-		prefix:   prefix, // 当前group的前缀
-		engine:   group.engine, // engine实例指针
+		parent:   group,                           // 父group
+		prefix:   prefix,                          // 当前group的前缀
+		engine:   group.engine,                    // engine实例指针
 	}
 }
 
@@ -188,41 +188,44 @@ func (group *RouterGroup) Group(component string, handlers ...HandlerFunc) *Rout
 // frequently used, non-standardized or custom methods (e.g. for internal
 // communication with a proxy).
 // Handler注册了一个新的请求handler和中间件, 他有给定的路径和方法
-// 最后一个handler应该是真是的handler, 其他的应该是中间件, 他可以共享不同的router
-// 在github查看实例代码
-//
-// 对于  GET, POST, PUT, PATCH and DELETE 请求, 各自的快捷韩式应该被使用
+// 最后一个handler应该是真的handler, 其他的应该是中间件, 他可以共享不同的router(路由)
+// 对于  GET, POST, PUT, PATCH and DELETE 请求, 各自的快捷方式应该被使用
 //
 // 这个函数用于批量加载, 并且不要经常使用这个函数, 不是标准的自定义函数(例如, 内部的沟通和代理)
 func (group *RouterGroup) Handle(method, p string, handlers []HandlerFunc) {
-	p = path.Join(group.prefix, p)
-	handlers = group.combineHandlers(handlers)
+	p = path.Join(group.prefix, p)             // group 的全路径
+	handlers = group.combineHandlers(handlers) // 组合handlers
 	group.engine.router.Handle(method, p, func(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
-		group.createContext(w, req, params, handlers).Next()
+		group.createContext(w, req, params, handlers).Next() // 实际请求处理的地方
 	})
 }
 
 // POST is a shortcut for router.Handle("POST", path, handle)
+// POST 是router.Handle("POST", path, handle)的快捷方式
 func (group *RouterGroup) POST(path string, handlers ...HandlerFunc) {
 	group.Handle("POST", path, handlers)
 }
 
 // GET is a shortcut for router.Handle("GET", path, handle)
+// GET 是router.Handle("GET", path, handle)的快捷方式
 func (group *RouterGroup) GET(path string, handlers ...HandlerFunc) {
 	group.Handle("GET", path, handlers)
 }
 
 // DELETE is a shortcut for router.Handle("DELETE", path, handle)
+// DELETE 是router.Handle("DELETE", path, handle)的快捷方式
 func (group *RouterGroup) DELETE(path string, handlers ...HandlerFunc) {
 	group.Handle("DELETE", path, handlers)
 }
 
 // PATCH is a shortcut for router.Handle("PATCH", path, handle)
+// PATCH 是router.Handle("PATCH", path, handle)的快捷方式
 func (group *RouterGroup) PATCH(path string, handlers ...HandlerFunc) {
 	group.Handle("PATCH", path, handlers)
 }
 
 // PUT is a shortcut for router.Handle("PUT", path, handle)
+// PUT 是router.Handle("PATCH", path, handle)的快捷方式
 func (group *RouterGroup) PUT(path string, handlers ...HandlerFunc) {
 	group.Handle("PUT", path, handlers)
 }
@@ -256,6 +259,9 @@ func (c *Context) Next() {
 // Forces the system to do not continue calling the pending handlers.
 // For example, the first handler checks if the request is authorized. If it's not, context.Abort(401) should be called.
 // The rest of pending handlers would never be called for that request.
+// 强制系统不继续调用挂起的handlers
+// 例如, 第一个handler检查是否请求被验证, 如果没用, 应该调用context.Abort 401
+// 这个请求剩余挂起的handlers将永远不会调用
 func (c *Context) Abort(code int) {
 	c.Writer.WriteHeader(code)
 	c.index = AbortIndex
@@ -267,14 +273,23 @@ func (c *Context) Abort(code int) {
 // context.Error("Operation aborted", err)
 // context.Abort(500)
 // ```
+// Fail 和 Abort一样, 但是会抛出一个错误消息
+// 调用 context.Fail(500, err)` 等同于
+// ```
+// context.Error("Operation aborted", err)
+// context.Abort(500)
+// ```
 func (c *Context) Fail(code int, err error) {
 	c.Error(err, "Operation aborted")
 	c.Abort(code)
 }
 
 // Attachs an error to the current context. The error is pushed to a list of errors.
-// It's a gooc idea to call Error for each error ocurred during the resolution of a request.
+// It's a good idea to call Error for each error ocurred during the resolution of a request.
 // A middleware can be used to collect all the errors and push them to a database together, print a log, or append it in the HTTP response.
+// 附加一个error到当前的context上, 这个err会推到errors列表里面
+//对请求解析期间发生的每个错误都调用Error是一个好主意。
+// 一个中间件能被用于去收集这些错误并且将他们存入数据库中, 打印日志, 或者将他们加入http 响应体里面
 func (c *Context) Error(err error, meta interface{}) {
 	c.Errors = append(c.Errors, ErrorMsg{
 		Message: err.Error(),
@@ -288,6 +303,8 @@ func (c *Context) Error(err error, meta interface{}) {
 
 // Sets a new pair key/value just for the specefied context.
 // It also lazy initializes the hashmap
+// 给指定的context设置新的一对键值对
+// 这个方法也初始化了hasmap
 func (c *Context) Set(key string, item interface{}) {
 	if c.Keys == nil {
 		c.Keys = make(map[string]interface{})
@@ -297,6 +314,8 @@ func (c *Context) Set(key string, item interface{}) {
 
 // Returns the value for the given key.
 // It panics if the value doesn't exist.
+// 通过给定的键返回值
+// 如果值不存在将会panic
 func (c *Context) Get(key string) interface{} {
 	var ok bool
 	var item interface{}
@@ -316,6 +335,7 @@ func (c *Context) Get(key string) interface{} {
 /************************************/
 
 // Like ParseBody() but this method also writes a 400 error if the json is not valid.
+// 和ParseBody差不多但是这个方法会写入400错误如果这个json是非法的
 func (c *Context) EnsureBody(item interface{}) bool {
 	if err := c.ParseBody(item); err != nil {
 		c.Fail(400, err)
@@ -325,6 +345,7 @@ func (c *Context) EnsureBody(item interface{}) bool {
 }
 
 // Parses the body content as a JSON input. It decodes the json payload into the struct specified as a pointer.
+// 使用json来解析body content, 它解码json有效载荷送入指定的结构体指针。
 func (c *Context) ParseBody(item interface{}) error {
 	decoder := json.NewDecoder(c.Req.Body)
 	if err := decoder.Decode(&item); err == nil {
@@ -352,6 +373,8 @@ func (c *Context) JSON(code int, obj interface{}) {
 
 // Serializes the given struct as a XML into the response body in a fast and efficient way.
 // It also sets the Content-Type as "application/xml"
+// 将给定的结构体以一种快速高效的形式序列化到响应体内
+// 也会设置Content-Type 为 application/xml
 func (c *Context) XML(code int, obj interface{}) {
 	if code >= 0 {
 		c.Writer.WriteHeader(code)
@@ -367,6 +390,8 @@ func (c *Context) XML(code int, obj interface{}) {
 // Renders the HTTP template specified by his file name.
 // It also update the HTTP code and sets the Content-Type as "text/html".
 // See http://golang.org/doc/articles/wiki/
+// 通过指定的文件名渲染http模板
+// 也会更新http状态码并设置Content-Type为text/html
 func (c *Context) HTML(code int, name string, data interface{}) {
 	if code >= 0 {
 		c.Writer.WriteHeader(code)
@@ -382,6 +407,7 @@ func (c *Context) HTML(code int, name string, data interface{}) {
 }
 
 // Writes the given string into the response body and sets the Content-Type to "text/plain"
+// 写入给定的字符串到响应体中并且设置Content-Type 为 test/plain
 func (c *Context) String(code int, msg string) {
 	c.Writer.Header().Set("Content-Type", "text/plain")
 	c.Writer.WriteHeader(code)
@@ -389,6 +415,7 @@ func (c *Context) String(code int, msg string) {
 }
 
 // Writes some data into the body stream and updates the HTTP code
+// 写入一些数据到相应的body stream中并且更新状态码
 func (c *Context) Data(code int, data []byte) {
 	c.Writer.WriteHeader(code)
 	c.Writer.Write(data)
