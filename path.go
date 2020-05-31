@@ -18,6 +18,19 @@ package gin
 //	   that is, replace "/.." by "/" at the beginning of a path.
 //
 // If the result of this process is an empty string, "/" is returned.
+// cleanPath是path的URL版本。Clean，它返回一个标准的URL路径
+// 消去。和. .元素。
+//
+// 在没有进一步的处理之前，重复地应用以下规则
+// 完成:
+// 1。用一个斜杠替换多个斜杠。
+// 2。消除。路径名元素(当前目录)。
+// 3。消除每个内心…路径名元素(父目录)
+// 与非-..在它之前的元素。
+// / 4。消除……开始根路径的元素:
+// 也就是说，将路径开头的“/..”替换为“/”。
+//
+// 如果这个进程的结果是一个空字符串，则返回"/"。
 func cleanPath(p string) string {
 	// Turn empty string into "/"
 	if p == "" {

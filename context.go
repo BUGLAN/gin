@@ -41,27 +41,32 @@ const abortIndex int8 = math.MaxInt8 / 2
 // Context is the most important part of gin. It allows us to pass variables between middleware,
 // manage the flow, validate the JSON of a request and render a JSON response for example.
 type Context struct {
-	writermem responseWriter
-	Request   *http.Request
-	Writer    ResponseWriter
+	writermem responseWriter // 自己定义的responseWriter 主要做一个状态管理
+	Request   *http.Request  // 定义的http Request用于获取请求
+	Writer    ResponseWriter // 主要做一个数据写入
 
-	Params   Params
-	handlers HandlersChain
-	index    int8
-	fullPath string
+	Params   Params        // url中的参数类似于 /:name
+	handlers HandlersChain // handlers的链
+	index    int8          // 可以理解为handers的索引
+	fullPath string        // 完整的路径
 
-	engine *Engine
+	engine *Engine // engine的实例
 
 	// Keys is a key/value pair exclusively for the context of each request.
+	// 键是一个键/值对专门为每个请求的上下文。
+	// 用于对中间键去在一个请求的生命周期中存储数据, 类似于flask框架中的g
 	Keys map[string]interface{}
 
 	// Errors is a list of errors attached to all the handlers/middlewares who used this context.
+	// 错误是错误的列表附在所有处理程序/中间件来使用。
 	Errors errorMsgs
 
 	// Accepted defines a list of manually accepted formats for content negotiation.
+	// 接受手动定义一组接受格式内容协商。
 	Accepted []string
 
 	// queryCache use url.ParseQuery cached the param query result from c.Request.URL.Query()
+	// queryCache使用url。从c.Request.URL.Query ParseQuery缓存参数查询结果()
 	queryCache url.Values
 
 	// formCache use url.ParseQuery cached PostForm contains the parsed form data from POST, PATCH,
@@ -88,6 +93,8 @@ func (c *Context) reset() {
 
 // Copy returns a copy of the current context that can be safely used outside the request's scope.
 // This has to be used when the context has to be passed to a goroutine.
+// 返回当前上下文的一个副本,副本可以安全地使用请求的范围之外。
+// 当上下文必须被传递到goroutine时，必须使用这个方法。
 func (c *Context) Copy() *Context {
 	var cp = *c
 	cp.writermem.ResponseWriter = nil
@@ -121,6 +128,7 @@ func (c *Context) HandlerNames() []string {
 }
 
 // Handler returns the main handler.
+// 返回最后一个handler
 func (c *Context) Handler() HandlerFunc {
 	return c.handlers.Last()
 }
@@ -130,6 +138,7 @@ func (c *Context) Handler() HandlerFunc {
 //     router.GET("/user/:id", func(c *gin.Context) {
 //         c.FullPath() == "/user/:id" // true
 //     })
+// 返回full path
 func (c *Context) FullPath() string {
 	return c.fullPath
 }
@@ -141,6 +150,7 @@ func (c *Context) FullPath() string {
 // Next should be used only inside middleware.
 // It executes the pending handlers in the chain inside the calling handler.
 // See example in GitHub.
+// 执行所有HandlerFunc
 func (c *Context) Next() {
 	c.index++
 	for c.index < int8(len(c.handlers)) {
@@ -150,6 +160,7 @@ func (c *Context) Next() {
 }
 
 // IsAborted returns true if the current context was aborted.
+// 是否中断
 func (c *Context) IsAborted() bool {
 	return c.index >= abortIndex
 }
@@ -158,12 +169,15 @@ func (c *Context) IsAborted() bool {
 // Let's say you have an authorization middleware that validates that the current request is authorized.
 // If the authorization fails (ex: the password does not match), call Abort to ensure the remaining handlers
 // for this request are not called.
+
+// 中断HandlerFunc的执行
 func (c *Context) Abort() {
 	c.index = abortIndex
 }
 
 // AbortWithStatus calls `Abort()` and writes the headers with the specified status code.
 // For example, a failed attempt to authenticate a request could use: context.AbortWithStatus(401).
+// 给状态并中断
 func (c *Context) AbortWithStatus(code int) {
 	c.Status(code)
 	c.Writer.WriteHeaderNow()
@@ -173,6 +187,7 @@ func (c *Context) AbortWithStatus(code int) {
 // AbortWithStatusJSON calls `Abort()` and then `JSON` internally.
 // This method stops the chain, writes the status code and return a JSON body.
 // It also sets the Content-Type as "application/json".
+// 给数据并中断
 func (c *Context) AbortWithStatusJSON(code int, jsonObj interface{}) {
 	c.Abort()
 	c.JSON(code, jsonObj)
@@ -181,6 +196,7 @@ func (c *Context) AbortWithStatusJSON(code int, jsonObj interface{}) {
 // AbortWithError calls `AbortWithStatus()` and `Error()` internally.
 // This method stops the chain, writes the status code and pushes the specified error to `c.Errors`.
 // See Context.Error() for more details.
+// 给错误并中断
 func (c *Context) AbortWithError(code int, err error) *Error {
 	c.AbortWithStatus(code)
 	return c.Error(err)
@@ -195,6 +211,11 @@ func (c *Context) AbortWithError(code int, err error) *Error {
 // A middleware can be used to collect all the errors and push them to a database together,
 // print a log, or append it in the HTTP response.
 // Error will panic if err is nil.
+// 将错误附加到当前上下文。将错误推到错误列表中。
+// 为请求解析过程中发生的每个错误调用Error是个好主意。
+// 中间件可以用来收集所有的错误并将它们一起推入数据库，
+// 打印一个日志，或者将它附加到HTTP响应中。
+// 如果err为nil，则Error会引起恐慌。
 func (c *Context) Error(err error) *Error {
 	if err == nil {
 		panic("err is nil")
@@ -218,6 +239,7 @@ func (c *Context) Error(err error) *Error {
 
 // Set is used to store a new key/value pair exclusively for this context.
 // It also lazy initializes  c.Keys if it was not used previously.
+// 在context中设置属性(懒加载)
 func (c *Context) Set(key string, value interface{}) {
 	if c.Keys == nil {
 		c.Keys = make(map[string]interface{})
@@ -227,12 +249,14 @@ func (c *Context) Set(key string, value interface{}) {
 
 // Get returns the value for the given key, ie: (value, true).
 // If the value does not exists it returns (nil, false)
+// 在context中获取属性(懒加载)
 func (c *Context) Get(key string) (value interface{}, exists bool) {
 	value, exists = c.Keys[key]
 	return
 }
 
 // MustGet returns the value for the given key if it exists, otherwise it panics.
+// 在context中获取属性(懒加载), 不存在则会panic
 func (c *Context) MustGet(key string) interface{} {
 	if value, exists := c.Get(key); exists {
 		return value
@@ -241,6 +265,7 @@ func (c *Context) MustGet(key string) interface{} {
 }
 
 // GetString returns the value associated with the key as a string.
+// GetString快捷方法
 func (c *Context) GetString(key string) (s string) {
 	if val, ok := c.Get(key); ok && val != nil {
 		s, _ = val.(string)
@@ -338,6 +363,7 @@ func (c *Context) GetStringMapStringSlice(key string) (smss map[string][]string)
 //         // a GET request to /user/john
 //         id := c.Param("id") // id == "john"
 //     })
+// 根据名称获取ur里面的值
 func (c *Context) Param(key string) string {
 	return c.Params.ByName(key)
 }
@@ -350,6 +376,7 @@ func (c *Context) Param(key string) string {
 // 	   c.Query("name") == "Manu"
 // 	   c.Query("value") == ""
 // 	   c.Query("wtf") == ""
+// 获取url query里面的值
 func (c *Context) Query(key string) string {
 	value, _ := c.GetQuery(key)
 	return value
@@ -362,6 +389,7 @@ func (c *Context) Query(key string) string {
 //     c.DefaultQuery("name", "unknown") == "Manu"
 //     c.DefaultQuery("id", "none") == "none"
 //     c.DefaultQuery("lastname", "none") == ""
+//  获取url query里面的值, 没有则返回默认值
 func (c *Context) DefaultQuery(key, defaultValue string) string {
 	if value, ok := c.GetQuery(key); ok {
 		return value
@@ -377,6 +405,10 @@ func (c *Context) DefaultQuery(key, defaultValue string) string {
 //     ("Manu", true) == c.GetQuery("name")
 //     ("", false) == c.GetQuery("id")
 //     ("", true) == c.GetQuery("lastname")
+// GetQuery类似于Query()，它返回键控url查询值
+// 如果它存在' (value, true) '(即使该值是一个空字符串)，
+// 否则返回' (""，false) '。
+// 它是“c.Request.URL.Query().Get(key)”的快捷方式
 func (c *Context) GetQuery(key string) (string, bool) {
 	if values, ok := c.GetQueryArray(key); ok {
 		return values[0], ok
@@ -462,6 +494,7 @@ func (c *Context) getFormCache() {
 	if c.formCache == nil {
 		c.formCache = make(url.Values)
 		req := c.Request
+		// 解析form表单
 		if err := req.ParseMultipartForm(c.engine.MaxMultipartMemory); err != nil {
 			if err != http.ErrNotMultipart {
 				debugPrint("error on parse multipart form array: %v", err)

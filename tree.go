@@ -390,6 +390,11 @@ type nodeValue struct {
 // If no handle can be found, a TSR (trailing slash redirect) recommendation is
 // made if a handle exists with an extra (without the) trailing slash for the
 // given path.
+// getValue返回用给定路径(键)注册的句柄。的值
+// 通配符保存到映射中。
+// 如果找不到句柄，建议使用TSR(尾部斜杠重定向)
+// 如果句柄存在，后面有一个额外的斜杠(不带斜杠)
+// 给定路径。
 func (n *node) getValue(path string, po Params, unescape bool) (value nodeValue) {
 	value.params = po
 walk: // Outer loop for walking the tree
